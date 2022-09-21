@@ -3,7 +3,7 @@ package repoclose_test
 import (
 	"testing"
 
-	"repoclose-checker"
+	"github.com/japanfuse/repoclose"
 
 	"github.com/gostaticanalysis/testutil"
 	"golang.org/x/tools/go/analysis/analysistest"
