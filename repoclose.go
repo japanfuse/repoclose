@@ -1,11 +1,12 @@
 package repoclose
 
 import (
-	"fmt"
 	"go/ast"
 	"go/types"
 	"strings"
 
+	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/gostaticanalysis/analysisutil"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
@@ -32,14 +33,45 @@ var RepositoryInterface *types.Interface
 
 var gPass *analysis.Pass
 
+var allPkgs []*types.Package
+var set mapset.Set[*types.Package]
+var iTransaction *types.Interface
+
 func initialize(pass *analysis.Pass) {
 	gPass = pass
+
+	allPkgs = pass.Pkg.Imports()
+	set = mapset.NewSet(allPkgs...)
+	for _, p := range gPass.Pkg.Imports() {
+		setImportedPkgs(p)
+	}
+}
+
+func setImportedPkgs(pkg *types.Package) {
+	for _, p := range pkg.Imports() {
+		if !set.Contains(p) {
+			set.Add(p)
+			allPkgs = append(allPkgs, p)
+			setImportedPkgs(p)
+		}
+	}
 }
 
 func run(pass *analysis.Pass) (any, error) {
 	inspect := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 
 	initialize(pass)
+
+	obj := analysisutil.ObjectOf(gPass, "portxserver/domain/repository", "Transaction")
+	if obj == nil {
+		return nil, nil
+	}
+
+	var ok bool
+	iTransaction, ok = obj.Type().(*types.Interface)
+	if !ok {
+		return nil, nil
+	}
 
 	nodeFilter := []ast.Node{
 		(*ast.FuncDecl)(nil),
@@ -73,7 +105,6 @@ func check(stmts []ast.Stmt) {
 		case *ast.DeferStmt:
 			if isCloseCall(stmt.Call) {
 				ident := getReceiverIdent(stmt.Call.Fun)
-				fmt.Println(ident)
 				delete(repoAssigns, ident)
 			}
 		}
@@ -86,10 +117,8 @@ func check(stmts []ast.Stmt) {
 
 // 左辺の識別子が repo という suffix を持っていたら true
 func isRepoAssignment(stmt *ast.AssignStmt) bool {
-	ident := exprToString(stmt.Lhs[0])
-
-	ident = strings.ToLower(ident)
-	return strings.HasSuffix(ident, "repo")
+	t := gPass.TypesInfo.TypeOf(stmt.Lhs[0])
+	return types.Implements(t, iTransaction)
 }
 
 func isCloseCall(stmt *ast.CallExpr) bool {
