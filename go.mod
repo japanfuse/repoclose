@@ -1,4 +1,4 @@
-module repoclose-checker
+module github.com/japanfuse/repoclose-checker
 
 go 1.19
 

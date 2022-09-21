@@ -1,7 +1,7 @@
 package main
 
 import (
-	"repoclose-checker"
+	"github.com/japanfuse/repoclose-checker"
 
 	"golang.org/x/tools/go/analysis/unitchecker"
 )
